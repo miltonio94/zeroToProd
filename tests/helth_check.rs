@@ -1,10 +1,10 @@
-use sqlx::PgPool;
+use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
-use zero2prod::configuration::get_config;
+use zero2prod::configuration::{get_config, DatabaseSettings};
 use zero2prod::startup::run;
 extern crate dotenv;
 use dotenv::dotenv;
-use std::{thread, time};
+use uuid::Uuid;
 
 pub struct TestApp {
     pub address: String,
@@ -32,20 +32,38 @@ async fn spawn_app() -> TestApp {
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://127.0.0.1:{}", port);
 
-    let config = get_config().expect("Failed to read config file");
-    let connection_pool = PgPool::connect(&config.database.connection_string())
-        .await
-        .expect("Filed to connect to postgres");
+    let mut config = get_config().expect("Failed to read config file");
+    config.database.db_name = Uuid::new_v4().to_string();
 
+    let connection_pool = configure_database(&config.database).await;
     let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
     let _ = tokio::spawn(server);
-
-    thread::sleep(time::Duration::from_millis(1000));
 
     TestApp {
         address,
         db_pool: connection_pool,
     }
+}
+
+pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
+    let mut connection = PgConnection::connect(&config.connection_string_without_db())
+        .await
+        .expect("Failed to connect to postgres");
+
+    connection
+        .execute(format!(r#"CREATE DATABASE "{}";"#, config.db_name).as_str())
+        .await
+        .expect("Filed to create database");
+
+    let connection_pool = PgPool::connect(&config.connection_string())
+        .await
+        .expect("Failed to connect to database");
+    sqlx::migrate!("./migrations")
+        .run(&connection_pool)
+        .await
+        .expect("Failed to migrate database");
+
+    connection_pool
 }
 
 #[tokio::test]
