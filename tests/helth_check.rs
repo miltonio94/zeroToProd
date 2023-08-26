@@ -45,17 +45,17 @@ async fn health_check_works() {
 async fn spawn_app() -> TestApp {
     Lazy::force(&TRACING);
 
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
-    let port = listener.local_addr().unwrap().port();
-    let address = format!("http://127.0.0.1:{}", port);
+    // let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+    // let port = listener.local_addr().unwrap().port();
+    let address = format!("http://127.0.0.1:{}", 8000);
 
     let mut config = get_config().expect("Failed to read config file");
     config.database.db_name = Uuid::new_v4().to_string();
 
     let connection_pool = configure_database(&config.database).await;
 
-    let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
-    let _ = tokio::spawn(server);
+    // let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
+    // let _ = tokio::spawn(server);
 
     TestApp {
         address,
